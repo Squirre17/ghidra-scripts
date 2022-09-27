@@ -1,4 +1,5 @@
 # coding:utf8
+# this is teacher self write
 #@category execise
 try:
     # For https://github.com/VDOO-Connected-Trust/ghidra-pyi-generator
@@ -40,18 +41,15 @@ def find_vuln_in_func(seed):
             varnodes.add(curvn)
         # iter 获取所有把curvn作为input的 pcode list
         iter = curvn.getDescendants()# iterator to all PcodeOps that take this as input
+        # vul = getenv
+        # v1 COPY vul xxx <- pcode
         while iter.hasNext():
             op = iter.next()
             if not op:
                 continue
             if op.getOpcode() == PcodeOp.CALL:
                 called_func = getFunctionAt(op.getInput(0).getAddress())
-                #TODO: 这两个b一样？？？ CALL的input[0]就是要调用的函数
-                # DBG("op is {}".format(op))
-                # DBG("op.getInput(0).getAddress() is {}".format(op.getInput(0).getAddress()))
-                # DBG("called_func is {}".format(called_func.getEntryPoint()))
                 if called_func.getName() == 'popen':
-                    # DBG("seed vn is {}".format(seed))
                     print("Found vuln {} @ {} -> {} @ {}"
                       .format(
                         source_func_name,
@@ -63,21 +61,15 @@ def find_vuln_in_func(seed):
                 if called_func.getName() == 'sprintf':
                     curvn = op.getInput(1) # input[0] is function addr, input[1] is register
                     curvn_def = curvn.getDef() # get the pcode op this varnode belongs to
-                    # DBG("curvn_def is {}".format(curvn_def))
                     if curvn_def.getOpcode() == PcodeOp.PTRSUB: # 局部变量 因为栈上都是RSP + off寻址
-                        # DBG("curvn_def is {}".format(curvn_def))
                         vn_addr = HighFunctionDBUtil.getSpacebaseReferenceAddress(currentProgram, curvn_def)
-                        # DBG("vn_addr is {}".format(vn_addr))
                         for item in seed.getHigh().getHighFunction().getPcodeOps():
-                            # DBG("item is {}".format(item))
                             if item.getOpcode() == PcodeOp.PTRSUB:
-                                DBG("item curvn_def is {}<->{}".format(item, curvn_def))
                                 new_vn_addr = HighFunctionDBUtil.getSpacebaseReferenceAddress(currentProgram,item)
-                                DBG("vn_addr new_vn_addr is {}<->{}".format(vn_addr.getOffset(), new_vn_addr.getOffset()))
                                 if vn_addr.getOffset() == new_vn_addr.getOffset(): # sprintf的写入变量 和
                                     worklist.put(item.getOutput())
-            else:
-                curvn = op.getOutput()
+            else: # v1 COPY vuln v2 
+                curvn = op.getOutput() # add v1 into taint set
             if not curvn:
                 continue
             worklist.put(curvn)
@@ -95,9 +87,9 @@ for item in refs:
     if not calling_func:
         continue
     high_calling_func = get_hfunction(calling_func)  # 获取函数的高级表示
-    xrefs_pcodes = high_calling_func.getPcodeOps(item.getFromAddress())  # 获取交叉引用处的pcodes
+    xrefs_pcodes = high_calling_func.getPcodeOps(item.getFromAddress())  # 获取交叉引用处的pcodes(一个指令有多个pcode)
     call_pcodes = [x for x in xrefs_pcodes if x.getOpcode() == PcodeOp.CALL]
-    if not call_pcodes:  # 找到CALL对应的pcode
+    if not call_pcodes: # 找到CALL对应的pcode
         continue
     call_pcode = call_pcodes[0] # first in all call pcodes
     output_vn = call_pcode.getOutput()  # get output vn corresponding to call pcode (return varnode)
