@@ -1,18 +1,24 @@
-# coding:utf8
+#TODO write a description for this script
+#@author 
 #@category execise
+#@keybinding 
+#@menupath Tools.Misc.Pipe Decoder
+#@toolbar 
+# coding:utf8
 try:
-  # For https://github.com/VDOO-Connected-Trust/ghidra-pyi-generator
-  from ghidra.ghidra_builtins import *
-  from functools import reduce
+    # For https://github.com/VDOO-Connected-Trust/ghidra-pyi-generator
+    from ghidra.ghidra_builtins import *
+    from functools import reduce
 except:
-  pass
+    pass
 
 import Queue
-
+# coding:utf8
 from ghidra.app.decompiler import DecompInterface
 from ghidra.program.model.pcode import PcodeOp
 from ghidra.program.model.symbol import RefType
 from ghidra.program.model.pcode import HighFunctionDBUtil
+
 def get_hfunction(fn):
   # get high function
   decomplib = DecompInterface()
@@ -37,7 +43,7 @@ def taint_trace_by_vn(first, inje_fn_name):
     for t_pcode in taint_pcodes:
       if t_pcode.getOpcode() == PcodeOp.CALL:
         call_fn = getFunctionAt(t_pcode.getInput(0).getAddress())
-        if call_fn.getName() in exec_fn_names:
+        if call_fn.getName() == dangerous_fn_name:
           print("Found vuln {} @ {} -> {} @ {}"
             .format(
               inje_fn_name,
@@ -66,37 +72,25 @@ def taint_trace_by_vn(first, inje_fn_name):
         continue
       vnq.put(t_vn)
       
-
-inje_fn_names = ["getenv"]
-exec_fn_names = ["popen", "system", "DoSystem"]
-tnsf_fn_names = ["sprintf", "strcpy"]
+# get all functions 
 fns = currentProgram.getFunctionManager().getFunctions(True)
-inje_fns = [f for f in fns if f.getName() in inje_fn_names]
-ref_2ds = []
-for fn in inje_fns:
-  refs = currentProgram.getReferenceManager().getReferencesTo(fn.getEntryPoint())
-  for ref in refs:
-    l = [ref ,fn.getName()]
-    ref_2ds.append(l)
-    
-for ref in ref_2ds:
-  ref_fn = getFunctionContaining(ref[0].getFromAddress())
-  ref_name = ref[1]
-  # print(ref_fn)
-  if not ref_fn:
-    continue
-  h_ref_fn = get_hfunction(ref_fn)
-  ref_pcodes = h_ref_fn.getPcodeOps(ref[0].getFromAddress())
-  # generally speak ,call_pcode is only one or no there
-  if not ref_pcodes:
-    continue
-  tmps = [p for p in ref_pcodes if p.getOpcode() == PcodeOp.CALL]
-  if not tmps:# not CALL op
-    continue
-  call_pcode = tmps[0] # only have one 
-  # ensure it is getenv
-  call_pcode = [p for p in tmps if p.getInput(0).getAddress() == inje_fns[0].getEntryPoint()][0]
-  if not call_pcode:
-    continue
-  output_vn = call_pcode.getOutput()
-  taint_trace_by_vn(output_vn, ref_name)
+taint_fn_name = "getenv"
+dangerous_fn_name = "popen"
+fn = [f for f in fns if f.getName() == taint_fn_name][0]
+
+refs = currentProgram.getReferenceManager().getReferencesTo(fn.getEntryPoint())
+for ref in refs:
+    # function that contain ref
+    ref_fn = getFunctionContaining(ref.getFromAddress())
+    if not ref_fn:
+        continue
+    h_ref_fn = get_hfunction(ref_fn)
+    # getPcodeOps will return a iterator
+    ref_pcodes = h_ref_fn.getPcodeOps(ref.getFromAddress())
+
+    call_pcode = [p for p in ref_pcodes if p.getOpcode() == PcodeOp.CALL][0]
+    output_vn = call_pcode.getOutput()
+    taint_trace_by_vn(output_vn, taint_fn_name)
+
+
+
