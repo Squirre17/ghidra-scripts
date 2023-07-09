@@ -1,4 +1,11 @@
+
+#@author 
+#@category execise
+#@keybinding 
+#@menupath Tools.Misc.Pipe Decoder
+#@toolbar 
 # coding:utf8
+
 try:
     # For https://github.com/VDOO-Connected-Trust/ghidra-pyi-generator
     from ghidra.ghidra_builtins import *
@@ -8,11 +15,14 @@ except:
 
 # coding:utf8
 from ghidra.app.decompiler import DecompInterface
-from ghidra.program.model.pcode import PcodeOp
+from ghidra.program.model.pcode import PcodeOp, Varnode
 from ghidra.program.model.symbol import RefType
+from ghidra.program.model.listing import FunctionIterator
+from ghidra.program.model.symbol import ReferenceIterator
+
 def get_hfunction(func):
     """
-    获取某个函数的高级表示
+    get high representation of this func
     """
     decomplib = DecompInterface()
     decomplib.openProgram(currentProgram)
@@ -22,36 +32,44 @@ def get_hfunction(func):
     return hfunction
 
 def get_vn_val(vn):
+    '''
+    vn: Varnode
+    '''
     if vn.isConstant():
         return vn.getOffset()
-    vn_def = vn.getDef()  #获取其SSA定义
+    vn_def = vn.getDef()  # get it's SSA defination
     if not vn_def:
         return None
     if vn_def.getOpcode() == PcodeOp.COPY:
         return get_vn_val(vn_def.getInput(0))
 
-# 获取所有函数
+# get all functions
+#  funcs : FunctionIterator 
 funcs = currentProgram.getFunctionManager().getFunctions(True)
 target_func = 'system'
-# 获取名称为system的函数
-funcs = [x for x  in funcs if x.getName() ==  target_func]
+# get function named "system"
+funcs = [x for x in funcs if x.getName() ==  target_func]
 
-# 获取对于system函数的交叉引用
+# get all xrefs for system func 
+# refs : list[ReferenceIterator]
 refs = []
+
 for func in funcs:
     refs += currentProgram.getReferenceManager().getReferencesTo(func.getEntryPoint())
+
 for item in refs:
-    calling_func = getFunctionContaining(item.getFromAddress())  # 获取交叉引用所在函数
+    calling_func = getFunctionContaining(item.getFromAddress())  # get the function where xref is located
     if not calling_func:
         continue
-    high_calling_func = get_hfunction(calling_func)  # 获取函数的高级表示
-    xrefs_pcodes = high_calling_func.getPcodeOps(item.getFromAddress()) # 获取交叉引用处的pcodes
+    high_calling_func = get_hfunction(calling_func)              # get high representation about this function 
+    xrefs_pcodes = high_calling_func.getPcodeOps(item.getFromAddress()) # get pcodes where xref is located
     call_pcodes = [x for x  in xrefs_pcodes if x.getOpcode() == PcodeOp.CALL]
-    if not call_pcodes:  # 找到CALL对应的pcode
+    if not call_pcodes:  # find corresponding pcode for CALL op 
         continue
+
     call_pcode = call_pcodes[0]
-    first_param_vn = call_pcode.getInput(1) # 获取第一个参数对应的varnode
-    vn_val = get_vn_val(first_param_vn)  # 获取varnode对应的值
+    first_param_vn = call_pcode.getInput(1) # get corresponding varnode for 1st argu
+    vn_val = get_vn_val(first_param_vn)  # get corresponding value for above vn
     if vn_val:
-        data = getDataAt(toAddr(vn_val)) # 获取特定地址的值
+        data = getDataAt(toAddr(vn_val)) # get the value for specific address
         print('system @{} {}'.format(item.getFromAddress(),data.getValue()))
